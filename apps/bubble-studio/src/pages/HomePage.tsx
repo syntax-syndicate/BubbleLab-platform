@@ -8,7 +8,10 @@ import {
   Search,
   Plus,
   Copy,
+  Filter,
+  ChevronDown,
 } from 'lucide-react';
+import { isFlowActive, type FlowActiveFilter } from '../utils/flowActiveStatus';
 import { useBubbleFlowList } from '../hooks/useBubbleFlowList';
 import { MonthlyUsageBar } from '../components/MonthlyUsageBar';
 import { SignedIn } from '../components/AuthComponents';
@@ -39,7 +42,10 @@ export const HomePage: React.FC<HomePageProps> = ({
     null
   );
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [activeFilter, setActiveFilter] = useState<FlowActiveFilter>('all');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef<HTMLDivElement>(null);
 
   // Duplicate flow hook
   const { duplicateFlow, isLoading: isDuplicating } = useDuplicateFlow({
@@ -81,10 +87,21 @@ export const HomePage: React.FC<HomePageProps> = ({
     currentName: renamingFlow?.name,
   });
 
-  // Filter flows based on search query
+  // Filter flows based on search query and active status
   const flows = allFlows.filter((flow) => {
-    if (!searchQuery.trim()) return true;
-    return flow.name.toLowerCase().includes(searchQuery.toLowerCase());
+    // Search filter
+    if (searchQuery.trim()) {
+      if (!flow.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+        return false;
+      }
+    }
+    // Active status filter
+    if (activeFilter !== 'all') {
+      const flowIsActive = isFlowActive(flow);
+      if (activeFilter === 'active' && !flowIsActive) return false;
+      if (activeFilter === 'inactive' && flowIsActive) return false;
+    }
+    return true;
   });
 
   const handleDeleteClick = (flowId: number, event: React.MouseEvent) => {
@@ -125,11 +142,17 @@ export const HomePage: React.FC<HomePageProps> = ({
     }
   }, [duplicatingFlowId, isDuplicating, duplicateFlow]);
 
-  // Close menu when clicking outside
+  // Close menu and filter dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setOpenMenuId(null);
+      }
+      if (
+        filterRef.current &&
+        !filterRef.current.contains(event.target as Node)
+      ) {
+        setIsFilterOpen(false);
       }
     };
 
@@ -185,18 +208,83 @@ export const HomePage: React.FC<HomePageProps> = ({
             </button>
           </div>
 
-          {/* Search Bar */}
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-gray-500" />
+          {/* Search Bar and Filter */}
+          <div className="flex gap-3">
+            <div className="relative flex-1">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-gray-500" />
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search flows..."
+                className="w-full pl-10 pr-4 py-2.5 bg-[#1a1a1a] border border-white/5 text-gray-100 text-sm rounded-lg focus:outline-none focus:border-white/10 placeholder-gray-500 transition-all duration-200"
+              />
             </div>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search flows..."
-              className="w-full pl-10 pr-4 py-2.5 bg-[#1a1a1a] border border-white/5 text-gray-100 text-sm rounded-lg focus:outline-none focus:border-white/10 placeholder-gray-500 transition-all duration-200"
-            />
+
+            {/* Filter Dropdown */}
+            <div className="relative" ref={filterRef}>
+              <button
+                type="button"
+                onClick={() => setIsFilterOpen(!isFilterOpen)}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm rounded-lg border transition-all duration-200 ${
+                  activeFilter !== 'all'
+                    ? 'bg-purple-600/20 border-purple-500/50 text-purple-300 hover:bg-purple-600/30'
+                    : 'bg-[#1a1a1a] border-white/5 text-gray-400 hover:border-white/10 hover:text-gray-300'
+                }`}
+              >
+                <Filter className="h-4 w-4" />
+                <span className="font-medium">
+                  {activeFilter === 'all'
+                    ? 'All'
+                    : activeFilter === 'active'
+                      ? 'Active'
+                      : 'Inactive'}
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {/* Filter Dropdown Menu */}
+              {isFilterOpen && (
+                <div className="absolute right-0 mt-2 w-40 rounded-lg shadow-xl bg-[#1a1a1a] border border-white/10 overflow-hidden z-20">
+                  {(
+                    [
+                      { value: 'all', label: 'All Flows' },
+                      { value: 'active', label: 'Active' },
+                      { value: 'inactive', label: 'Inactive' },
+                    ] as const
+                  ).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setActiveFilter(option.value);
+                        setIsFilterOpen(false);
+                      }}
+                      className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
+                        activeFilter === option.value
+                          ? 'bg-purple-600/20 text-purple-300'
+                          : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
+                      }`}
+                    >
+                      {option.value === 'active' && (
+                        <span className="w-2 h-2 rounded-full bg-green-500" />
+                      )}
+                      {option.value === 'inactive' && (
+                        <span className="w-2 h-2 rounded-full bg-gray-500" />
+                      )}
+                      {option.value === 'all' && (
+                        <span className="w-2 h-2 rounded-full bg-gradient-to-r from-green-500 to-gray-500" />
+                      )}
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -208,20 +296,27 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
         ) : flows.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24">
-            {searchQuery ? (
+            {searchQuery || activeFilter !== 'all' ? (
               <>
                 <h2 className="text-xl font-semibold text-gray-300 mb-2">
                   No flows found
                 </h2>
                 <p className="text-gray-500 text-sm mb-4">
-                  No flows match "{searchQuery}"
+                  {searchQuery && activeFilter !== 'all'
+                    ? `No ${activeFilter} flows match "${searchQuery}"`
+                    : searchQuery
+                      ? `No flows match "${searchQuery}"`
+                      : `No ${activeFilter} flows`}
                 </p>
                 <button
                   type="button"
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => {
+                    setSearchQuery('');
+                    setActiveFilter('all');
+                  }}
                   className="px-4 py-2 text-sm text-purple-400 hover:text-purple-300 transition-colors"
                 >
-                  Clear search
+                  Clear filters
                 </button>
               </>
             ) : (
